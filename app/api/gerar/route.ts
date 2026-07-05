@@ -63,12 +63,43 @@ async function gerarComGroq(prompt: string) {
   return completion.choices[0]?.message?.content || "{}"
 }
 
+// Reset automático do contador mensal — chamado a cada geração
+async function verificarResetMensal(supabase: Awaited<ReturnType<typeof supabaseServer>>, userId: string) {
+  const { data: assin } = await supabase
+    .from("assinaturas")
+    .select("conteudos_usados_mes, ciclo_inicio")
+    .eq("user_id", userId)
+    .single()
+
+  if (!assin) return
+
+  const hoje = new Date()
+  const cicloInicio = assin.ciclo_inicio ? new Date(assin.ciclo_inicio) : null
+
+  const precisaResetar = !cicloInicio ||
+    hoje.getFullYear() > cicloInicio.getFullYear() ||
+    hoje.getMonth() > cicloInicio.getMonth()
+
+  if (precisaResetar) {
+    await supabase
+      .from("assinaturas")
+      .update({
+        conteudos_usados_mes: 0,
+        ciclo_inicio: hoje.toISOString().split("T")[0],
+      })
+      .eq("user_id", userId)
+  }
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await supabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
 
   const { marca_id, tipo, rede, tema, data_agendada } = await request.json()
+
+  // Reset automático antes de verificar limite
+  await verificarResetMensal(supabase, user.id)
 
   const { data: assinatura } = await supabase
     .from("assinaturas")
@@ -83,7 +114,10 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (assinatura && plano && assinatura.conteudos_usados_mes >= plano.limite_conteudos_mes) {
-    return NextResponse.json({ error: "Limite de conteúdos do plano atingido. Faça upgrade para continuar." }, { status: 403 })
+    return NextResponse.json({
+      error: "Limite de conteúdos do plano atingido. Faça upgrade para continuar.",
+      tipo: "limite_atingido"
+    }, { status: 403 })
   }
 
   const { data: marca } = await supabase
@@ -100,7 +134,11 @@ export async function POST(request: NextRequest) {
   let raw = ""
   try {
     raw = await gerarComGroq(prompt)
-  } catch {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : ""
+    if (msg.includes("rate_limit") || msg.includes("429")) {
+      return NextResponse.json({ error: "Muitas requisições seguidas. Aguarda alguns segundos e tenta de novo." }, { status: 429 })
+    }
     return NextResponse.json({ error: "Erro ao gerar conteúdo. Tente novamente." }, { status: 500 })
   }
 
@@ -109,7 +147,14 @@ export async function POST(request: NextRequest) {
     const clean = raw.replace(/```json|```/g, "").trim()
     parsed = JSON.parse(clean)
   } catch {
-    return NextResponse.json({ error: "Erro ao interpretar a resposta gerada." }, { status: 500 })
+    // Tenta extrair JSON caso o modelo tenha retornado texto extra
+    const match = raw.match(/\{[\s\S]*\}/)
+    if (!match) return NextResponse.json({ error: "A IA retornou um formato inesperado. Tenta gerar de novo." }, { status: 500 })
+    try {
+      parsed = JSON.parse(match[0])
+    } catch {
+      return NextResponse.json({ error: "Não conseguimos interpretar o conteúdo gerado. Tenta de novo." }, { status: 500 })
+    }
   }
 
   const conteudoFinal = parsed.cta
