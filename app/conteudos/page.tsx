@@ -1,5 +1,6 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Scissors, Sparkles, Copy, LogOut, Check, Trash2 } from "lucide-react"
@@ -26,9 +27,10 @@ export default function Dashboard() {
   const [conteudos, setConteudos] = useState<Conteudo[]>([])
 
   const [dataAgendada, setDataAgendada] = useState("")
-  const [tipo, setTipo] = useState("post")
+  const searchParams = useSearchParams()
+  const [tipo, setTipo] = useState(searchParams.get("tipo") || "post")
   const [rede, setRede] = useState("instagram")
-  const [tema, setTema] = useState("")
+  const [tema, setTema] = useState(searchParams.get("tema") || "")
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState("")
   const [aviso, setAviso] = useState("")
