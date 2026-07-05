@@ -1,13 +1,13 @@
 "use client"
 import { useRouter, usePathname } from "next/navigation"
-import { LayoutDashboard, PenSquare, Calendar, Store, BookOpen, Settings } from "lucide-react"
+import { LayoutDashboard, PenSquare, Calendar, Store, Vault, Settings } from "lucide-react"
 
 const TABS = [
   { href: "/dashboard",       icon: LayoutDashboard, label: "Início" },
   { href: "/conteudos",       icon: PenSquare,        label: "Conteúdos" },
   { href: "/calendario",      icon: Calendar,         label: "Calendário" },
   { href: "/minha-barbearia", icon: Store,            label: "Barbearia" },
-  { href: "/biblioteca",      icon: BookOpen,         label: "Biblioteca" },
+  { href: "/cofre",           icon: Vault,            label: "Cofre" },
   { href: "/configuracoes",   icon: Settings,         label: "Config" },
 ]
 
@@ -18,7 +18,7 @@ export function TabBar() {
   return (
     <nav className="tab-bar" style={{ gridTemplateColumns: `repeat(${TABS.length}, 1fr)` }}>
       {TABS.map(({ href, icon: Icon, label }) => {
-        const active = pathname === href
+        const active = pathname === href || (href === "/conteudos" && pathname.startsWith("/conteudos"))
         return (
           <button key={href} onClick={() => router.push(href)} className="tab-item">
             <Icon
